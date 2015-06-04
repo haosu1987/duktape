@@ -966,6 +966,9 @@ Planned
 * Add support for an external date/time provider to make porting the Date
   built-in to exotic platforms easier
 
+* Add duk_dump_function() and duk_load_function() API calls which provide
+  bytecode dump/load support (GH-27)
+
 * Add duk_instanceof() API call (GH-148)
 
 * Add duk_steal_buffer() API call which allows user code to steal the current
