@@ -1028,7 +1028,38 @@ DUK_INTERNAL duk_bool_t duk_js_compare_helper(duk_hthread *thr, duk_tval *tv_x, 
  *      E5 Section 15.3.4.5.3
  *
  *  For other objects, a TypeError is thrown.
+ *
+ *  Limited Proxy support: don't support 'getPrototypeOf' trap but
+ * continue lookup in Proxy target if the value is a Proxy.
  */
+
+/* FIXME: generalize to duk_hobject_props.c */
+
+DUK_LOCAL duk_hobject *duk__proxy_target_maybe(duk_hthread *thr, duk_hobject *val) {
+	duk_hobject *h_target;
+	duk_hobject *h_handler;
+
+	DUK_ASSERT(thr != NULL);
+	DUK_ASSERT(val != NULL);
+
+	if (!DUK_UNLIKELY(DUK_HOBJECT_HAS_EXOTIC_PROXYOBJ(val))) {
+		return val;
+	}
+
+	/* If a Proxy is revoked, an error gets thrown. */
+
+	/* FIXME: add support for Proxy chains (Proxy object whose target is
+	 * another Proxy etc).  Such objects cannot be created right now but
+	 * could support it here.  May need a sanity limit?
+	 */
+
+	if (duk_hobject_proxy_check(thr, val, &h_target, &h_handler)) {
+		DUK_ASSERT(h_target != NULL);
+		return h_target;
+	}
+
+	return NULL;
+}
 
 DUK_INTERNAL duk_bool_t duk_js_instanceof(duk_hthread *thr, duk_tval *tv_x, duk_tval *tv_y) {
 	duk_context *ctx = (duk_context *) thr;
@@ -1117,6 +1148,10 @@ DUK_INTERNAL duk_bool_t duk_js_instanceof(duk_hthread *thr, duk_tval *tv_x, duk_
 	proto = duk_require_hobject(ctx, -1);
 	duk_pop(ctx);  /* -> [ ... lval rval ] */
 
+	DUK_ASSERT(val != NULL);
+	val = duk__proxy_target_maybe(thr, val);
+	DUK_ASSERT(val != NULL);
+
 	sanity = DUK_HOBJECT_PROTOTYPE_CHAIN_SANITY;
 	do {
 		/*
@@ -1137,11 +1172,17 @@ DUK_INTERNAL duk_bool_t duk_js_instanceof(duk_hthread *thr, duk_tval *tv_x, duk_
 		 *  also the built-in Function prototype, the result is true.
 		 */
 
+		DUK_ASSERT(val != NULL);
 		val = DUK_HOBJECT_GET_PROTOTYPE(thr->heap, val);
 
 		if (!val) {
 			goto pop_and_false;
-		} else if (val == proto) {
+		}
+
+		DUK_ASSERT(val != NULL);
+		val = duk__proxy_target_maybe(thr, val);
+
+		if (val == proto) {
 			goto pop_and_true;
 		}
 
